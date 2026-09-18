@@ -1,0 +1,4 @@
+sae-lens==6.51.0
+torch==2.14.0
+transformer-lens==3.9.0
+transformers==5.17.0
