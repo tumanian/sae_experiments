@@ -37,6 +37,14 @@ opts into the GPU — verified to match CPU to ~1e-4, but only ~20% faster for a
    .venv/bin/python sae/02_steer.py --feature <id> --strength 4 8 16 --prompt "Today I"
    ```
 
+4. **Steer with several features and score it** — the real experiment. `--scale` is a master
+   volume knob; outputs are scored for target vocabulary, coherence (nll under the unsteered
+   model), and closed-loop feature activation.
+   ```bash
+   .venv/bin/python sae/04_steer_multi.py --edit 9752:25 --edit 23807:25 --edit 4855:20 --edit 1032:20 \
+       --prompt "San Francisco is a city" --scale 0 0.6 0.8 1 1.2 1.4 --samples 6 --quiet
+   ```
+
 Every run writes a JSON to `sae/results/` so you keep a log of what you tried.
 
 ## Worked example (what the first run found)
@@ -49,6 +57,14 @@ Every run writes a JSON to `sae/results/` so you keep a log of what you tried.
 - `02_steer` feature `11978` on *"The weather today is"*: strength 10 → no change,
   20 → "so much better than it was", 40 → "so nice", "the best", "so glad", "perfect opportunity".
   So this feature is *causal*, not just a correlate — and ~20–40 is the useful range at layer 8.
+
+- `04_steer_multi` "SF doom loop" (SF + drugs + fleeing + leaving, layer 8): doom vocabulary
+  goes 0.4% → 4% at scale 0.6–1.0 with nll 2.3 → 2.8 (still fluent); at 1.4+ it collapses into
+  function-word soup ("for the, the, to, and") — which 3-gram repetition does *not* catch, nll does.
+  Closed-loop shows only the drugs feature re-activating in the outputs.
+- Lesson from feature `3917`: constant activation (20.0 in every context) + a single dominant
+  direct-logit token (`ctuary`) = token detector, not a concept. Ranking by peak activation
+  selects for these at every layer; use contrast to find concepts.
 
 ## Things to try next
 
