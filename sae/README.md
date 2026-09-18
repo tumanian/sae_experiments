@@ -62,6 +62,11 @@ Every run writes a JSON to `sae/results/` so you keep a log of what you tried.
   goes 0.4% → 4% at scale 0.6–1.0 with nll 2.3 → 2.8 (still fluent); at 1.4+ it collapses into
   function-word soup ("for the, the, to, and") — which 3-gram repetition does *not* catch, nll does.
   Closed-loop shows only the drugs feature re-activating in the outputs.
+- **Ablation** of that steer (8 samples/row, scale 1): drugs-only gives 4.7% doom words at nll 2.49
+  — matches the full four-feature steer (4.2%) at half the fluency cost. Dropping the SF feature
+  *raises* doom words to 6.5% (the prompt already says SF; the topic feature is a passenger that
+  competes with the frame). Fleeing + leaving without drugs: 2.8% at nll 2.98 — weak, expensive.
+  Revised recipe: `--edit 23807:25` alone.
 - Lesson from feature `3917`: constant activation (20.0 in every context) + a single dominant
   direct-logit token (`ctuary`) = token detector, not a concept. Ranking by peak activation
   selects for these at every layer; use contrast to find concepts.
