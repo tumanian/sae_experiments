@@ -11,6 +11,6 @@ SSH="ssh -i $HOME/.ssh/sae-cpu.pem -o StrictHostKeyChecking=accept-new ubuntu@$I
 until $SSH test -f .bootstrap-done 2>/dev/null; do echo "waiting for bootstrap..."; sleep 15; done
 
 rsync -az -e "ssh -i $HOME/.ssh/sae-cpu.pem" --exclude .cache --exclude results --exclude __pycache__ "$ROOT/sae/" "ubuntu@$IP:sae/"
-$SSH "cd ~ && ~/venv/bin/python $(printf '%q ' "$@")"
+$SSH "cd ~ && HF_TOKEN=${HF_TOKEN:-} ~/venv/bin/python $(printf '%q ' "$@")"
 rsync -az -e "ssh -i $HOME/.ssh/sae-cpu.pem" "ubuntu@$IP:sae/results/" "$ROOT/sae/results/"
 echo "[synced] results -> sae/results/"

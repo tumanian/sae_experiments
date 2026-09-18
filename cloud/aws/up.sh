@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Launch a CPU EC2 box for the SAE experiments. Idempotent-ish: reuses key pair and security group.
-#   cloud/aws/up.sh                      # c7i.xlarge (4 vCPU / 8 GB, ~$0.18/hr) in us-east-1
-#   INSTANCE_TYPE=m7i.large cloud/aws/up.sh
+# Launch an EC2 box for the SAE experiments. Idempotent-ish: reuses key pair and security group.
+#   cloud/aws/up.sh                              # CPU: c7i.xlarge (4 vCPU / 8 GB, ~$0.18/hr)
+#   INSTANCE_TYPE=g5.xlarge cloud/aws/up.sh      # GPU: A10G 24 GB (~$1.00/hr) -> Deep Learning AMI, CUDA torch
+#   INSTANCE_TYPE=g6e.xlarge cloud/aws/up.sh     # GPU: L40S 48 GB (~$1.90/hr) for Llama 8B + SAE
 set -euo pipefail
 cd "$(dirname "$0")"
 REGION=${AWS_REGION:-us-east-1}
@@ -27,11 +28,19 @@ fi
 MYIP=$(curl -s https://checkip.amazonaws.com)
 aws ec2 authorize-security-group-ingress --group-id "$SG" --protocol tcp --port 22 --cidr "$MYIP/32" >/dev/null 2>&1 || true
 
-AMI=$(aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id --query Parameter.Value --output text)
+case "$INSTANCE_TYPE" in
+  g*|p*)  # GPU: AWS Deep Learning Base AMI ships the NVIDIA driver; needs a bigger root volume
+    AMI_PARAM=/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id
+    VOLUME=100 ;;
+  *)
+    AMI_PARAM=/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    VOLUME=30 ;;
+esac
+AMI=$(aws ssm get-parameter --name "$AMI_PARAM" --query Parameter.Value --output text)
 
 ID=$(aws ec2 run-instances \
   --image-id "$AMI" --instance-type "$INSTANCE_TYPE" --key-name "$NAME" --security-group-ids "$SG" \
-  --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=30,VolumeType=gp3}' \
+  --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$VOLUME,VolumeType=gp3}" \
   --user-data file://bootstrap.sh \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$NAME}]" \
   --query 'Instances[0].InstanceId' --output text)

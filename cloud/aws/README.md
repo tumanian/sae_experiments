@@ -1,14 +1,22 @@
-# Run the SAE experiments on an AWS CPU box
+# Run the SAE experiments on an AWS box
 
-GPT-2 small doesn't need a GPU, so this uses a plain `c7i.xlarge` (4 vCPU / 8 GB,
-~$0.18/hr in us-east-1) — no GPU quota request needed. Ubuntu 24.04, CPU-only torch.
+Default is a CPU `c7i.xlarge` (~$0.18/hr, no quota needed). For real models set
+`INSTANCE_TYPE=g5.xlarge` (A10G 24 GB, ~$1/hr): `up.sh` then uses the AWS Deep Learning
+Base AMI (NVIDIA driver preinstalled) and `bootstrap.sh` installs CUDA torch.
 
 ## One-time
 
-1. Credentials: `aws configure` (access key, secret, region `us-east-1`). The IAM user
-   needs EC2 + `ssm:GetParameter` (the `AmazonEC2FullAccess` policy plus SSM read is enough).
-2. That's it — `up.sh` creates the key pair (`~/.ssh/sae-cpu.pem`) and a security group
-   that only allows SSH from your current IP.
+1. **Credentials.** `aws login` (browser sign-in) or `aws configure` with an access key.
+   Region `us-east-1`. Permissions: EC2 full access plus `ssm:GetParameter` (used to look
+   up the current AMI id).
+2. **GPU quota** (only for `g*` instances). New accounts have 0. Service Quotas console ->
+   EC2 -> "Running On-Demand G and VT instances" -> request 8 vCPUs. Usually approved in
+   hours, sometimes a day. `up.sh` fails with `VcpuLimitExceeded` until then.
+3. **Hugging Face token** (for Gemma / Llama, not GPT-2): accept the model license on the
+   HF page, then `export HF_TOKEN=...` before `run.sh`; it's forwarded to the box.
+
+`up.sh` creates the key pair (`~/.ssh/sae-cpu.pem`) and a security group that only allows
+SSH from your current IP.
 
 ## Loop
 
