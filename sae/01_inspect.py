@@ -24,7 +24,6 @@ def main():
 
     model, sae = load(args.layer, args.model)
     tokens, acts = feature_acts(model, sae, args.text)
-    acts[0] = 0  # BOS position has huge, uninformative activations
 
     peak, _ = acts.max(dim=0)                       # [d_sae]
     n_alive = int((peak > 0).sum())

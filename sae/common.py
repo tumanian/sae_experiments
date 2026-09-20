@@ -64,12 +64,21 @@ def hook_name(sae) -> str:
 
 
 def feature_acts(model, sae, text: str):
-    """Return (token_strings, acts) where acts is [seq, d_sae] of SAE feature activations."""
+    """Return (token_strings, acts) where acts is [seq, d_sae] of SAE feature activations.
+
+    Positions with outlier residual norms are zeroed: BOS always, plus any position whose norm is
+    >4x the median (Gemma 2 has a "massive activation" on the first content token too, norm ~700
+    vs ~130 elsewhere; features there are meaningless and would dominate every ranking).
+    """
     tokens = model.to_tokens(text)
     _, cache = model.run_with_cache(tokens, names_filter=hook_name(sae))
-    resid = cache[hook_name(sae)][0]            # [seq, d_model]
-    acts = sae.encode(resid.to(sae.dtype))      # [seq, d_sae]  (model may be bf16, SAE is fp32)
-    return model.to_str_tokens(tokens[0]), acts.detach()
+    resid = cache[hook_name(sae)][0].to(sae.dtype)   # [seq, d_model]  (model may be bf16, SAE is fp32)
+    acts = sae.encode(resid).detach()                # [seq, d_sae]
+    norms = resid.norm(dim=-1)
+    outlier = norms > 4 * norms[1:].median()
+    outlier[0] = True
+    acts[outlier] = 0
+    return model.to_str_tokens(tokens[0]), acts
 
 
 def neuronpedia_url(sae, feature: int) -> str:

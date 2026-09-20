@@ -24,8 +24,14 @@ SSH from your current IP.
 cloud/aws/up.sh                                                    # ~1 min to boot, ~3 min bootstrap
 cloud/aws/run.sh sae/01_inspect.py --text "The Golden Gate Bridge"  # syncs sae/, runs, pulls results back
 cloud/aws/run.sh sae/02_steer.py --feature 11978 --strength 20 40
-cloud/aws/down.sh                                                  # terminate — do this, it bills hourly
+cloud/aws/stop.sh                                                  # pause: no compute charge, keeps the model cache
+cloud/aws/start.sh                                                 # resume (new IP, handled)
+cloud/aws/down.sh                                                  # terminate for good
 ```
+
+Gemma on the GPU box: `cloud/aws/run.sh sae/01_inspect.py --model gemma-2-2b --text "..."`. First run
+downloads ~10 GB of weights; load takes ~2-3 min on g5.xlarge (16 GB RAM + swap), then each script
+call is a fresh load, so batch your questions. `g5.2xlarge` (32 GB RAM) loads without swapping.
 
 `run.sh` rsyncs `sae/` up (so local edits are live), runs the command with `~/venv/bin/python`,
 and rsyncs `sae/results/` back down. The HF model cache stays on the box between runs

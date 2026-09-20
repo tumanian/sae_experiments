@@ -14,7 +14,6 @@ from common import add_model_args, feature_acts, hook_name, load, neuronpedia_la
 
 def peaks(model, sae, text):
     _, acts = feature_acts(model, sae, text)
-    acts[0] = 0
     return acts.max(dim=0).values
 
 

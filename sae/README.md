@@ -71,6 +71,12 @@ Every run writes a JSON to `sae/results/` so you keep a log of what you tried.
   direct-logit token (`ctuary`) = token detector, not a concept. Ranking by peak activation
   selects for these at every layer; use contrast to find concepts.
 
+- **Gemma 2 2B (Gemma Scope, layer 12, 16k)** on an A10G: same doom-vs-thriving contrast gives the
+  same lexical answer ("leave", "empty", "drugs" vs "tourism", "full", "coffee") - so the lexical
+  result was the method (word-swapped parallel paragraphs, peak-diff ranking), not GPT-2's size.
+  Gotcha: Gemma 2 has a massive-activation outlier on the *first content token* (resid norm ~700 vs
+  ~130), not just BOS; `feature_acts` now masks any position >4x the median norm.
+
 ## Things to try next
 
 - Change `--layer` (0–11). Early layers = token/syntax features, later = semantic.
