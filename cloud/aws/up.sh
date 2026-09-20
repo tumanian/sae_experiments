@@ -5,7 +5,7 @@
 #   INSTANCE_TYPE=g6e.xlarge cloud/aws/up.sh     # GPU: L40S 48 GB (~$1.90/hr) for Llama 8B + SAE
 set -euo pipefail
 cd "$(dirname "$0")"
-REGION=${AWS_REGION:-us-east-1}
+REGION=${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-east-1)}
 INSTANCE_TYPE=${INSTANCE_TYPE:-c7i.xlarge}
 NAME=sae-cpu
 KEY_FILE=$HOME/.ssh/$NAME.pem
