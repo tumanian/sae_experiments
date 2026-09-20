@@ -19,8 +19,12 @@ warnings.filterwarnings("ignore", message="(?s).*model_from_pretrained_kwargs") 
 import torch
 from sae_lens import SAE, HookedSAETransformer
 
-MODEL_NAME = "gpt2-small"
-SAE_RELEASE = "gpt2-small-res-jb"  # Joseph Bloom's residual-stream SAEs, one per layer
+# name -> (TransformerLens model, sae_lens release, sae_id template, default layer, dtype)
+PRESETS = {
+    "gpt2":       ("gpt2-small",  "gpt2-small-res-jb",               "blocks.{L}.hook_resid_pre",       8,  "float32"),
+    "gemma-2-2b": ("gemma-2-2b",  "gemma-scope-2b-pt-res-canonical", "layer_{L}/width_16k/canonical",   12, "bfloat16"),
+}
+DEFAULT_MODEL = os.environ.get("SAE_MODEL", "gpt2")
 HERE = Path(__file__).parent
 CACHE_DIR = HERE / ".cache" / "neuronpedia"
 RESULTS_DIR = HERE / "results"
@@ -34,17 +38,25 @@ def device() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def load(layer: int = 8):
-    """Load GPT-2 small and the residual-stream SAE for `layer` (hook_resid_pre)."""
+def load(layer: int | None = None, model_name: str = DEFAULT_MODEL):
+    """Load a model and its residual-stream SAE for `layer` (preset default if None)."""
+    tl_name, release, sae_id_tpl, default_layer, dtype = PRESETS[model_name]
+    layer = default_layer if layer is None else layer
     dev = device()
     t0 = time.time()
-    sae = SAE.from_pretrained(release=SAE_RELEASE, sae_id=f"blocks.{layer}.hook_resid_pre", device=dev)
+    sae = SAE.from_pretrained(release=release, sae_id=sae_id_tpl.format(L=layer), device=dev)
     # load the model exactly the way the SAE was trained on it (no extra weight processing)
     model = HookedSAETransformer.from_pretrained_no_processing(
-        MODEL_NAME, device=dev, **sae.cfg.metadata.model_from_pretrained_kwargs)
-    print(f"[load] {MODEL_NAME} + {SAE_RELEASE}/layer{layer} on {dev} "
-          f"({sae.cfg.d_sae} features) in {time.time() - t0:.1f}s")
+        tl_name, device=dev, dtype=getattr(torch, dtype), **(sae.cfg.metadata.model_from_pretrained_kwargs or {}))
+    print(f"[load] {tl_name} + {release}/layer{layer} on {dev} "
+          f"({sae.cfg.d_sae} features, {dtype}) in {time.time() - t0:.1f}s")
     return model, sae
+
+
+def add_model_args(parser):
+    """Shared CLI flags: --model preset and --layer (None = preset default)."""
+    parser.add_argument("--model", default=DEFAULT_MODEL, choices=list(PRESETS))
+    parser.add_argument("--layer", type=int, default=None)
 
 
 def hook_name(sae) -> str:
@@ -56,24 +68,23 @@ def feature_acts(model, sae, text: str):
     tokens = model.to_tokens(text)
     _, cache = model.run_with_cache(tokens, names_filter=hook_name(sae))
     resid = cache[hook_name(sae)][0]            # [seq, d_model]
-    acts = sae.encode(resid)                    # [seq, d_sae]
+    acts = sae.encode(resid.to(sae.dtype))      # [seq, d_sae]  (model may be bf16, SAE is fp32)
     return model.to_str_tokens(tokens[0]), acts.detach()
 
 
 def neuronpedia_url(sae, feature: int) -> str:
-    layer = hook_name(sae).split(".")[1]
-    return f"https://www.neuronpedia.org/gpt2-small/{layer}-res-jb/{feature}"
+    return f"https://www.neuronpedia.org/{sae.cfg.metadata.neuronpedia_id}/{feature}"
 
 
 def neuronpedia_label(sae, feature: int) -> str:
     """Fetch the top auto-interp explanation for a feature (cached on disk). Empty string on failure."""
-    layer = hook_name(sae).split(".")[1]
+    np_id = sae.cfg.metadata.neuronpedia_id            # e.g. "gpt2-small/8-res-jb"
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache_file = CACHE_DIR / f"{layer}-res-jb-{feature}.json"
+    cache_file = CACHE_DIR / f"{np_id.replace('/', '-')}-{feature}.json"
     if cache_file.exists():
         data = json.loads(cache_file.read_text())
     else:
-        url = f"https://www.neuronpedia.org/api/feature/gpt2-small/{layer}-res-jb/{feature}"
+        url = f"https://www.neuronpedia.org/api/feature/{np_id}/{feature}"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "sae-experiments"})
             with urllib.request.urlopen(req, timeout=10) as r:

@@ -20,7 +20,7 @@ import re
 
 import torch
 
-from common import feature_acts, hook_name, load, neuronpedia_label, save_result
+from common import add_model_args, feature_acts, hook_name, load, neuronpedia_label, save_result
 
 DOOM_LEXICON = ("homeless,homelessness,empty,vacant,vacancy,fled,flee,fleeing,leaving,exodus,crime,drug,drugs,"
                 "overdose,tent,tents,encampment,decline,decay,collapse,collapsing,crisis,closed,closing,shuttered,"
@@ -64,14 +64,14 @@ def main():
     p.add_argument("--scale", type=float, nargs="+", default=[0, 1])
     p.add_argument("--samples", type=int, default=4)
     p.add_argument("--tokens", type=int, default=50)
-    p.add_argument("--layer", type=int, default=8)
+    add_model_args(p)
     p.add_argument("--lexicon", default=DOOM_LEXICON)
     p.add_argument("--quiet", action="store_true", help="only print the summary table")
     args = p.parse_args()
 
     edits = dict(parse_edit(e) for e in args.edit)
     lexicon = set(args.lexicon.split(","))
-    model, sae = load(args.layer)
+    model, sae = load(args.layer, args.model)
     n_prompt = model.to_tokens(args.prompt).shape[1]
 
     print(f"\nprompt: {args.prompt!r}")
@@ -84,7 +84,7 @@ def main():
         vec = scale * base_vec
 
         def steer(resid, hook):
-            resid[:, :, :] += vec
+            resid[:, :, :] += vec.to(resid.dtype)
             return resid
 
         samples = []
@@ -116,7 +116,7 @@ def main():
               f"{mean([s['repeat'] for s in scored]):>7.3f}  "
               + "  ".join(f"{f}={v:.1f}" for f, v in closed.items()))
 
-    save_result("steer_multi", {"prompt": args.prompt, "layer": args.layer, "edits": edits,
+    save_result("steer_multi", {"prompt": args.prompt, "model": args.model, "layer": hook_name(sae), "edits": edits,
                                 "runs": {str(k): v for k, v in runs.items()}})
 
 

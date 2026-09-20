@@ -11,18 +11,18 @@ import argparse
 
 import torch
 
-from common import feature_acts, load, neuronpedia_label, neuronpedia_url, save_result
+from common import add_model_args, feature_acts, hook_name, load, neuronpedia_label, neuronpedia_url, save_result
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--text", required=True)
-    p.add_argument("--layer", type=int, default=8)
+    add_model_args(p)
     p.add_argument("--top", type=int, default=10)
     p.add_argument("--no-labels", action="store_true", help="skip Neuronpedia lookups")
     args = p.parse_args()
 
-    model, sae = load(args.layer)
+    model, sae = load(args.layer, args.model)
     tokens, acts = feature_acts(model, sae, args.text)
     acts[0] = 0  # BOS position has huge, uninformative activations
 
@@ -41,7 +41,7 @@ def main():
         print(f"        fires on: {', '.join(f'{t!r}={a}' for t, a in firing)}")
         print(f"        {neuronpedia_url(sae, idx)}\n")
 
-    save_result("inspect", {"text": args.text, "layer": args.layer, "n_alive": n_alive, "top": rows})
+    save_result("inspect", {"text": args.text, "model": args.model, "layer": hook_name(sae), "n_alive": n_alive, "top": rows})
 
 
 if __name__ == "__main__":

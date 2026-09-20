@@ -10,7 +10,7 @@ import argparse
 
 import torch
 
-from common import hook_name, load, neuronpedia_label, save_result
+from common import add_model_args, hook_name, load, neuronpedia_label, save_result
 
 
 def generate(model, prompt, max_new_tokens, seed):
@@ -23,12 +23,12 @@ def main():
     p.add_argument("--feature", type=int, required=True)
     p.add_argument("--strength", type=float, nargs="+", default=[8.0], help="one or more coefficients to try")
     p.add_argument("--prompt", default="I went for a walk and")
-    p.add_argument("--layer", type=int, default=8)
+    add_model_args(p)
     p.add_argument("--tokens", type=int, default=40)
     p.add_argument("--samples", type=int, default=2)
     args = p.parse_args()
 
-    model, sae = load(args.layer)
+    model, sae = load(args.layer, args.model)
     label = neuronpedia_label(sae, args.feature)
     print(f"\nfeature {args.feature}: {label or '(no label)'}\nprompt: {args.prompt!r}\n")
 
@@ -43,7 +43,7 @@ def main():
 
     for strength in args.strength:
         def steer(resid, hook):
-            resid[:, :, :] += strength * direction
+            resid[:, :, :] += (strength * direction).to(resid.dtype)
             return resid
 
         print(f"--- steered, strength={strength} ---")
@@ -54,7 +54,7 @@ def main():
                 outputs["steered"][strength].append(out)
                 print(f"[{s}] {out}\n")
 
-    save_result("steer", {"feature": args.feature, "label": label, "layer": args.layer,
+    save_result("steer", {"feature": args.feature, "label": label, "model": args.model, "layer": hook_name(sae),
                           "prompt": args.prompt, **outputs})
 
 

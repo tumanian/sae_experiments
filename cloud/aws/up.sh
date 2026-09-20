@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Launch an EC2 box for the SAE experiments. Idempotent-ish: reuses key pair and security group.
 #   cloud/aws/up.sh                              # CPU: c7i.xlarge (4 vCPU / 8 GB, ~$0.18/hr)
-#   INSTANCE_TYPE=g5.xlarge cloud/aws/up.sh      # GPU: A10G 24 GB (~$1.00/hr) -> Deep Learning AMI, CUDA torch
+#   INSTANCE_TYPE=g5.xlarge cloud/aws/up.sh      # GPU: A10G 24 GB, 16 GB RAM (~$1.00/hr) -> Deep Learning AMI, CUDA torch
+#   INSTANCE_TYPE=g5.2xlarge cloud/aws/up.sh     # same GPU, 32 GB RAM (~$1.21/hr) - loads bigger models without swap
 #   INSTANCE_TYPE=g6e.xlarge cloud/aws/up.sh     # GPU: L40S 48 GB (~$1.90/hr) for Llama 8B + SAE
 set -euo pipefail
 cd "$(dirname "$0")"

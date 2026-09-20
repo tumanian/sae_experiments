@@ -9,7 +9,7 @@ import argparse
 
 import torch
 
-from common import feature_acts, load, neuronpedia_label, neuronpedia_url, save_result
+from common import add_model_args, feature_acts, hook_name, load, neuronpedia_label, neuronpedia_url, save_result
 
 
 def peaks(model, sae, text):
@@ -34,16 +34,16 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--a", required=True)
     p.add_argument("--b", required=True)
-    p.add_argument("--layer", type=int, default=8)
+    add_model_args(p)
     p.add_argument("--top", type=int, default=8)
     p.add_argument("--no-labels", action="store_true")
     args = p.parse_args()
 
-    model, sae = load(args.layer)
+    model, sae = load(args.layer, args.model)
     pa, pb = peaks(model, sae, args.a), peaks(model, sae, args.b)
     a_only = show(sae, pa - pb, "stronger in A", args.top, not args.no_labels)
     b_only = show(sae, pb - pa, "stronger in B", args.top, not args.no_labels)
-    save_result("contrast", {"a": args.a, "b": args.b, "layer": args.layer,
+    save_result("contrast", {"a": args.a, "b": args.b, "model": args.model, "layer": hook_name(sae),
                              "stronger_in_a": a_only, "stronger_in_b": b_only})
 
 
