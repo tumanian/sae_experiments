@@ -77,6 +77,25 @@ Every run writes a JSON to `sae/results/` so you keep a log of what you tried.
   Gotcha: Gemma 2 has a massive-activation outlier on the *first content token* (resid norm ~700 vs
   ~130), not just BOS; `feature_acts` now masks any position >4x the median norm.
 
+- **Gemma has an urban-decline concept; GPT-2 doesn't.** `05_contrast_dataset` (12 varied decline
+  sentences vs 12 matched growth ones, hit-rate floor 0.75) on Gemma layer 12 finds `7033`
+  "economic crises" (promotes recession/bankruptcy/downturn/insolvency) and `15598` "decline or loss
+  over time" (promotes Decline/lost/losing/Gone). Label and logit lens agree, and the promoted words
+  appear nowhere in the dataset - it responds to the situation, not the wording. GPT-2's best was a
+  thin "closures" feature. The growth side has no consistent feature in either model.
+- Steering Gemma with `7033 + 15598` at 40 x scale 1.0-1.5 on "San Francisco is a city": baseline
+  writes tourism and food trucks, steered writes "on the brink of financial collapse", "the
+  once-great city is no longer the city of the future", "can't afford its famous cable cars" - at
+  nll 2.0-2.1 vs 1.5 baseline, i.e. still fluent. Closed-loop activation rises 0.0 -> 4.0, so the
+  generated text really does express the features we pushed (GPT-2 never showed this).
+- Caveat: the doom *lexicon* score barely moves on Gemma (0.018 vs GPT-2's 0.047) because the
+  lexicon was written for GPT-2's crude vocabulary (tents, drugs, homeless) and Gemma writes
+  "financial collapse", "downturn", "bail them out". The closed-loop metric caught what the keyword
+  metric missed - keyword scores are model-specific, feature scores aren't.
+- The density column earns its place: Gemma feature `1041` tops the raw score table (11.6, hits 1.00)
+  but has density 42.7% and a logit lens of 18th-century long-s text. Dense nuisance feature,
+  disqualified on sight.
+
 ## Things to try next
 
 - Change `--layer` (0–11). Early layers = token/syntax features, later = semantic.
