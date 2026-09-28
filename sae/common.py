@@ -85,24 +85,61 @@ def neuronpedia_url(sae, feature: int) -> str:
     return f"https://www.neuronpedia.org/{sae.cfg.metadata.neuronpedia_id}/{feature}"
 
 
-def neuronpedia_label(sae, feature: int) -> str:
-    """Fetch the top auto-interp explanation for a feature (cached on disk). Empty string on failure."""
+def neuronpedia_json(sae, feature: int) -> dict:
+    """Neuronpedia's record for a feature, cached on disk. Empty dict on failure."""
     np_id = sae.cfg.metadata.neuronpedia_id            # e.g. "gpt2-small/8-res-jb"
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = CACHE_DIR / f"{np_id.replace('/', '-')}-{feature}.json"
     if cache_file.exists():
-        data = json.loads(cache_file.read_text())
-    else:
-        url = f"https://www.neuronpedia.org/api/feature/{np_id}/{feature}"
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "sae-experiments"})
-            with urllib.request.urlopen(req, timeout=10) as r:
-                data = json.load(r)
-            cache_file.write_text(json.dumps(data))
-        except Exception:
-            return ""
-    exps = data.get("explanations") or []
+        return json.loads(cache_file.read_text())
+    url = f"https://www.neuronpedia.org/api/feature/{np_id}/{feature}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "sae-experiments"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.load(r)
+        cache_file.write_text(json.dumps(data))
+        return data
+    except Exception:
+        return {}
+
+
+def neuronpedia_label(sae, feature: int) -> str:
+    """The top auto-interp explanation: what makes the feature fire (the READ side)."""
+    exps = neuronpedia_json(sae, feature).get("explanations") or []
     return exps[0].get("description", "") if exps else ""
+
+
+def logit_lens(sae, feature: int, n: int = 6) -> list[str]:
+    """Tokens this feature promotes: W_dec[f] @ W_U, precomputed by Neuronpedia (the WRITE side).
+
+    A feature whose top promoted tokens are one word's pieces is a token detector, not a concept
+    (see feature 3917 in gpt2 layer 8: label says "sanctuary", logit lens says "ctuary").
+    """
+    return (neuronpedia_json(sae, feature).get("pos_str") or [])[:n]
+
+
+def feature_density(sae, feature: int) -> float:
+    """Fraction of tokens this feature fires on, per Neuronpedia. -1 if unknown.
+
+    Very dense features (>1%) are usually syntax/position; very sparse ones can be noise.
+    """
+    d = neuronpedia_json(sae, feature).get("frac_nonzero")
+    return float(d) if d is not None else -1.0
+
+
+def describe(sae, feature: int, labels: bool = True) -> str:
+    """One-line summary of a feature: label, promoted tokens, density."""
+    if not labels:
+        return ""
+    label = neuronpedia_label(sae, feature) or "(no label)"
+    promotes = logit_lens(sae, feature)
+    dens = feature_density(sae, feature)
+    parts = [label]
+    if promotes:
+        parts.append("promotes: " + ", ".join(repr(t) for t in promotes))
+    if dens >= 0:
+        parts.append(f"density {dens * 100:.3f}%")
+    return "  |  ".join(parts)
 
 
 def save_result(name: str, payload: dict) -> Path:
