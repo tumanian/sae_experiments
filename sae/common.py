@@ -57,6 +57,24 @@ def load(layer: int | None = None, model_name: str = DEFAULT_MODEL):
     return model, sae
 
 
+def load_model(model_name: str = DEFAULT_MODEL):
+    """Just the model, no SAE — for behavioural tests that only need generation."""
+    tl_name, _, _, _, dtype = PRESETS[model_name]
+    dev = device()
+    t0 = time.time()
+    model = HookedSAETransformer.from_pretrained_no_processing(
+        tl_name, device=dev, dtype=getattr(torch, dtype))
+    print(f"[load] {tl_name} on {dev} ({dtype}) in {time.time() - t0:.1f}s")
+    return model
+
+
+def chat_wrap(text: str, model_name: str) -> str:
+    """Gemma chat template, so an instruction-tuned model actually sees an instruction."""
+    if model_name not in INSTRUCT:
+        return text
+    return f"<start_of_turn>user\n{text}<end_of_turn>\n<start_of_turn>model\n"
+
+
 def add_model_args(parser):
     """Shared CLI flags: --model preset and --layer (None = preset default)."""
     parser.add_argument("--model", default=DEFAULT_MODEL, choices=list(PRESETS))
