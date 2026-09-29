@@ -113,6 +113,28 @@ Every run writes a JSON to `sae/results/` so you keep a log of what you tried.
     `--scale` knob in `04_steer_multi` already assumes. "Be more X" is a bigger X, not X plus a
     separate amplifier.
 
+- **"More X" leans on X having corpus history — your co-occurrence hypothesis mostly wins.**
+  `07_nonce_degree --repr` builds 12 matched pairs where a real adjective and an invented one
+  (kravish/exclamatory, blorpy/chromatic, welkish/figurative...) are given the *same* definition, so
+  the only difference is whether the word has ever been seen. Compare the (more - less) residual
+  directions, centered to remove the shared "an instruction word changed" component:
+  - nonce vs its own real twin: **-0.012 +- 0.125** (n=12) - essentially orthogonal.
+  - nonce vs a *mismatched* real adjective: **-0.173 +- 0.027** (n=132).
+  - So twins are reliably *less* anti-aligned than mismatches: 10/12 above the cross mean
+    (sign test p=0.039), P(twin > random mismatch) = 0.74. Something is composed from the
+    definition - but only a trace.
+  - Ceiling for comparison: two *real* paraphrases of the same attribute agree at **+0.55**
+    (exp 06, same model and layer). The nonce word recovers ~0% of that.
+  - Read: "more formal" is not a clean reusable operator. Most of the direction comes from the
+    adjective's own learned representation; a defined nonce word gets a faint echo.
+  - Caveat: gemma-2b-it is 2B. "Cannot compose" and "composes weakly" are hard to separate at this
+    scale; gemma-2-9b-it (Gemma Scope SAEs exist) is the confirmation run.
+- Generation-level version of the same test was **inconclusive** and is kept as a cautionary tale:
+  95% CI +-0.22 on 6 samples against effects of ~0.1-0.2, `more` had no headroom because the
+  baseline condition already named the attribute, and `more - less` conflated "less works" with
+  "more works" (only `less` moved, and only for real adjectives). Representation-level tests are
+  far more sensitive than counting behaviour when the model is small.
+
 ## Things to try next
 
 - Change `--layer` (0–11). Early layers = token/syntax features, later = semantic.

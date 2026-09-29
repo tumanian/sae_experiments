@@ -25,7 +25,7 @@ import re
 
 import torch
 
-from common import chat_wrap, load_model, save_result
+from common import add_model_args, chat_wrap, hook_name, load, load_model, save_result
 
 COLORS = r"(red|orange|yellow|green|blue|purple|violet|pink|brown|black|white|gray|grey|gold|silver|crimson|scarlet|azure|amber|teal)"
 
@@ -58,6 +58,24 @@ ATTRS = {
     "color":   ("begins every sentence with a colour word",     "blorpy",   "chromatic",   frac_color_start),
 }
 
+# For the REPRESENTATION test: 12 (nonce, real) pairs for the same behaviour. No generation, so no
+# seeds or scorers are needed and we can afford many more pairs. The nonce words are arbitrary --
+# deliberately giving no morphological hint of the meaning, so the definition is the only source.
+REPR_PAIRS = [
+    ("ends every sentence with an exclamation mark",        "kravish",  "exclamatory"),
+    ("includes a number in every sentence",                 "zibbly",   "quantitative"),
+    ("begins every sentence with a colour word",            "blorpy",   "chromatic"),
+    ("ends every sentence with a question mark",            "quandric", "interrogative"),
+    ("keeps every sentence under six words",                "thrimble", "terse"),
+    ("makes every sentence at least thirty words long",     "vosker",   "verbose"),
+    ("uses old-fashioned words such as thee and hence",     "glimf",    "archaic"),
+    ("presents the content as numbered items",              "narptic",  "enumerated"),
+    ("describes things by comparison to other things",      "welkish",  "figurative"),
+    ("uses I and me throughout",                            "drupine",  "personal"),
+    ("writes every word in capital letters",                "fanzo",    "capitalised"),
+    ("starts several words in a row with the same letter",  "mibbly",   "alliterative"),
+]
+
 # A partially-compliant example, so `more` has room to go up and `less` has room to go down.
 SEEDS = {
     "exclaim": "Portland is a city of bridges! It rains often. The coffee is very good!",
@@ -80,13 +98,79 @@ def build_prompt(metric, kind, degree_key):
             + TASK.format(degree=degree))
 
 
+def repr_test(model_name, layer):
+    """Representation-level version: does a DEFINED NONCE word get the same (more - less) direction
+    as its real-English twin? Generation-free and deterministic, so it measures what the model
+    understood rather than whether a 2B model managed to comply.
+    """
+    model, sae = load(layer, model_name)
+    hook = hook_name(sae)
+
+    def resid(text):
+        toks = model.to_tokens(chat_wrap(text, model_name))
+        _, cache = model.run_with_cache(toks, names_filter=hook)
+        return cache[hook][0, -1].float()
+
+    def prompt(definition, adj, degree):
+        return (f"{adj.capitalize()} writing {definition}. "
+                f"Write a paragraph about San Francisco, but {degree} {adj}.")
+
+    def delta(definition, adj):
+        d = resid(prompt(definition, adj, "more")) - resid(prompt(definition, adj, "less"))
+        return d / d.norm()
+
+    print(f"\nrepresentation-level nonce test at {hook}, {len(REPR_PAIRS)} pairs\n")
+    nonce = torch.stack([delta(d, n) for d, n, _ in REPR_PAIRS])
+    real = torch.stack([delta(d, r) for d, _, r in REPR_PAIRS])
+
+    # These prompts are near-identical (one word differs), so every delta carries a large shared
+    # "an instruction word changed here" component that inflates ALL cosines. Remove it by centering
+    # over the whole set, then ask whether twins are *specifically* aligned.
+    allv = torch.cat([nonce, real])
+    allv = allv - allv.mean(0, keepdim=True)
+    allv = allv / allv.norm(dim=1, keepdim=True)
+    n = len(REPR_PAIRS)
+    N, R = allv[:n], allv[n:]
+
+    twin = [(N[i] @ R[i]).item() for i in range(n)]                       # same behaviour, nonce vs real
+    cross = [(N[i] @ R[j]).item() for i in range(n) for j in range(n) if i != j]  # mismatched
+
+    print(f"{'behaviour':>14} {'nonce':>10} {'real':>14} {'twin cos':>9}")
+    for (d, nw, rw), t in zip(REPR_PAIRS, twin):
+        print(f"{d.split()[0] + '..':>14} {nw:>10} {rw:>14} {t:>+9.2f}")
+
+    import statistics as stat
+    tm, cm = stat.mean(twin), stat.mean(cross)
+    tci = 1.96 * stat.stdev(twin) / len(twin) ** 0.5
+    cci = 1.96 * stat.stdev(cross) / len(cross) ** 0.5
+    print(f"\ntwin  (nonce vs its own real twin) : {tm:+.3f} +- {tci:.3f}   n={len(twin)}")
+    print(f"cross (nonce vs a DIFFERENT real)  : {cm:+.3f} +- {cci:.3f}   n={len(cross)}")
+    print(f"separation                         : {tm - cm:+.3f}")
+    print(f"twins above the cross mean         : {sum(t > cm for t in twin)}/{len(twin)}")
+    print("\n--> twin >> cross  => the model composed the nonce word's meaning from its definition")
+    print("    and applied the same degree operation to it (H-abstract).")
+    print("    twin ~ cross    => the direction needs the real word's corpus history (H-local).")
+
+    save_result("nonce_repr", {"model": model_name, "layer": hook, "n_pairs": n,
+                               "pairs": [[d, nw, rw] for d, nw, rw in REPR_PAIRS],
+                               "twin": twin, "cross": cross,
+                               "twin_mean": tm, "cross_mean": cm, "separation": tm - cm})
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="gemma-2b-it")
+    p.add_argument("--repr", action="store_true",
+                   help="representation-level test (no generation): cos(nonce delta, real delta)")
+    p.add_argument("--layer", type=int, default=None)
     p.add_argument("--samples", type=int, default=6)
     p.add_argument("--tokens", type=int, default=70)
     p.add_argument("--show", action="store_true", help="print every generation")
     args = p.parse_args()
+
+    if args.repr:
+        repr_test(args.model, args.layer)
+        return
 
     model = load_model(args.model)
     results = {}
