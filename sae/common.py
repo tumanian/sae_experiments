@@ -23,7 +23,11 @@ from sae_lens import SAE, HookedSAETransformer
 PRESETS = {
     "gpt2":       ("gpt2-small",  "gpt2-small-res-jb",               "blocks.{L}.hook_resid_pre",       8,  "float32"),
     "gemma-2-2b": ("gemma-2-2b",  "gemma-scope-2b-pt-res-canonical", "layer_{L}/width_16k/canonical",   12, "bfloat16"),
+    # instruction-tuned: needed for anything that depends on the model obeying a prompt
+    "gemma-2b-it": ("gemma-2b-it", "gemma-2b-it-res-jb",              "blocks.{L}.hook_resid_post",      12, "bfloat16"),
 }
+# models that were trained to follow instructions (vs. base completion models)
+INSTRUCT = {"gemma-2b-it"}
 DEFAULT_MODEL = os.environ.get("SAE_MODEL", "gpt2")
 HERE = Path(__file__).parent
 CACHE_DIR = HERE / ".cache" / "neuronpedia"

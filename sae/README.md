@@ -96,6 +96,23 @@ Every run writes a JSON to `sae/results/` so you keep a log of what you tried.
   but has density 42.7% and a logit lens of 18th-century long-s text. Dense nuisance feature,
   disqualified on sight.
 
+- **Is there a "more / less" meta-direction? No — it's per-concept.** `06_meta_direction` takes
+  matched instruction pairs on gemma-2b-it layer 12, differences the residual at the last prompt
+  position, and compares those directions across attributes.
+  - Method validity: "be more negative" vs the token-disjoint "make it harsher" agree at **+0.55**
+    mean across six attributes, so the extracted directions are real and reproducible.
+  - Across *different* attributes, token-disjoint: mean cosine **-0.057**. No shared direction.
+  - `negative` and `optimistic` **anti**-correlate at **-0.58** — the opposite of what a shared
+    "crank it up" direction would produce.
+  - Spectrum is flat (35/27/20/8/6/4%), and the top components are *semantic*, not degree:
+    PC1 loads on formal+technical (register), PC2 splits negative vs optimistic (valence).
+  - Confound worth knowing: with "more"/"less" left in the prompts, a deliberately mismatched
+    `shuffled` pair scored +0.44..+0.58, as high as the real pairs — that shared variance is the
+    literal degree *token*, not intensity. Token-disjoint paraphrases are required to test this.
+  - Upshot: intensity lives *inside* a feature (its activation magnitude), which is what the
+    `--scale` knob in `04_steer_multi` already assumes. "Be more X" is a bigger X, not X plus a
+    separate amplifier.
+
 ## Things to try next
 
 - Change `--layer` (0–11). Early layers = token/syntax features, later = semantic.
